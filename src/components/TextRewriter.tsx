@@ -22,7 +22,7 @@ const TextRewriter = ({ demoMode = false }: TextRewriterProps) => {
   const { user, updateUserCredits } = useAuth();
   const { toast } = useToast();
 
-  // Example rewriting logic (would be replaced with API call to Undetectable.ai)
+  // Updated rewriting logic to call Undetectable.ai API
   const rewriteText = async () => {
     if (!inputText.trim()) {
       toast({
@@ -45,54 +45,75 @@ const TextRewriter = ({ demoMode = false }: TextRewriterProps) => {
 
     setIsProcessing(true);
     
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Apply simple rewriting logic based on style
-    let result = '';
-    const sentences = inputText.match(/[^.!?]+[.!?]+/g) || [inputText];
-    
-    switch(selectedStyle) {
-      case 'fluent':
-        result = sentences.map(s => s.trim()).join(' ');
-        break;
-      case 'creative':
-        result = sentences.map(s => s.trim().replace(/\b(\w+)\b/g, (match) => {
-          // Randomly keep or replace some words to simulate creativity
-          return Math.random() > 0.8 ? getAlternativeWord(match) : match;
-        })).join(' ');
-        break;
-      case 'formal':
-        result = sentences.map(s => s.trim().replace(/\b(got|get|lots|thing|stuff|okay|OK)\b/gi, (match) => {
-          // Replace casual words with more formal alternatives
-          return getFormalWord(match);
-        })).join(' ');
-        break;
-      case 'simple':
-        result = sentences.map(s => {
-          const simplified = s.trim()
-            .replace(/\b[a-zA-Z]{10,}\b/g, match => getSimpleWord(match));
-          return simplified;
-        }).join(' ');
-        break;
-    }
-
-    setOutputText(result);
-    setRewriteCount(prev => prev + 1);
-    
-    // Deduct credits if not in demo mode
-    if (!demoMode && user) {
-      updateUserCredits(user.credits - 1);
-      toast({
-        title: "Rewrite complete!",
-        description: `Used 1 credit. Remaining: ${user.credits - 1} credits.`,
+    try {
+      // Map our styles to what the API might expect
+      const styleMapping = {
+        'fluent': 'standard',
+        'creative': 'creative',
+        'formal': 'formal',
+        'simple': 'simple'
+      };
+      
+      // Prepare the API request
+      const response = await fetch('https://humanize.undetectable.ai/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: inputText,
+          style: styleMapping[selectedStyle] || 'standard',
+          // Add any other parameters required by the API
+        })
       });
+      
+      // Handle API response
+      if (!response.ok) {
+        throw new Error(`API request failed with status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Update the output text based on the API response
+      // Note: Adjust this based on the actual API response structure
+      if (data && data.humanized_text) {
+        setOutputText(data.humanized_text);
+      } else {
+        // Fallback to simple rewriting if API response is unexpected
+        const sentences = inputText.match(/[^.!?]+[.!?]+/g) || [inputText];
+        const fallbackResult = sentences.map(s => s.trim()).join(' ');
+        setOutputText(fallbackResult);
+        console.warn('API response did not contain expected data format, using fallback', data);
+      }
+      
+      setRewriteCount(prev => prev + 1);
+      
+      // Deduct credits if not in demo mode
+      if (!demoMode && user) {
+        updateUserCredits(user.credits - 1);
+        toast({
+          title: "Rewrite complete!",
+          description: `Used 1 credit. Remaining: ${user.credits - 1} credits.`,
+        });
+      }
+    } catch (error) {
+      console.error('Error calling humanize API:', error);
+      toast({
+        title: "Error rewriting text",
+        description: "There was a problem connecting to the rewriting service. Please try again.",
+        variant: "destructive"
+      });
+      
+      // Fallback to simple rewriting if API call fails
+      const sentences = inputText.match(/[^.!?]+[.!?]+/g) || [inputText];
+      const fallbackResult = sentences.map(s => s.trim()).join(' ');
+      setOutputText(fallbackResult);
+    } finally {
+      setIsProcessing(false);
     }
-    
-    setIsProcessing(false);
   };
 
-  // Helper functions for text transformation
+  // Helper functions for text transformation - keep as fallback if needed
   function getAlternativeWord(word: string) {
     const alternatives: Record<string, string[]> = {
       'good': ['excellent', 'fantastic', 'great', 'wonderful'],
