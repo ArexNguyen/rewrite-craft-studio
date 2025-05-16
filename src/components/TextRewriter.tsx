@@ -22,7 +22,7 @@ const TextRewriter = ({ demoMode = false }: TextRewriterProps) => {
   const { user, updateUserCredits } = useAuth();
   const { toast } = useToast();
 
-  // Updated rewriting logic to call Undetectable.ai API
+  // Updated rewriting logic to call Undetectable.ai API with correct format
   const rewriteText = async () => {
     if (!inputText.trim()) {
       toast({
@@ -46,24 +46,48 @@ const TextRewriter = ({ demoMode = false }: TextRewriterProps) => {
     setIsProcessing(true);
     
     try {
-      // Map our styles to what the API might expect
-      const styleMapping = {
-        'fluent': 'standard',
-        'creative': 'creative',
-        'formal': 'formal',
-        'simple': 'simple'
+      // Map our styles to the API's expected parameters
+      const styleMapping: Record<string, { readability: string; purpose: string; strength: string }> = {
+        'fluent': {
+          readability: "University",
+          purpose: "General Writing",
+          strength: "Balanced"
+        },
+        'creative': {
+          readability: "Journalist",
+          purpose: "Story",
+          strength: "More Human"
+        },
+        'formal': {
+          readability: "Doctorate",
+          purpose: "Business Material",
+          strength: "Quality"
+        },
+        'simple': {
+          readability: "High School", 
+          purpose: "General Writing",
+          strength: "More Human"
+        }
       };
       
-      // Prepare the API request
+      const selectedMappings = styleMapping[selectedStyle] || styleMapping.fluent;
+      
+      // Prepare the API request with the correct JSON format
       const response = await fetch('https://humanize.undetectable.ai/submit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: inputText,
-          style: styleMapping[selectedStyle] || 'standard',
-          // Add any other parameters required by the API
+          id: "79b84da7-bb2a-4e36-a135-e77e0f3e5144",
+          content: inputText,
+          readability: selectedMappings.readability,
+          purpose: selectedMappings.purpose,
+          strength: selectedMappings.strength,
+          model: "v2",
+          user_agent: "TextHuman Web App",
+          document_type: "Text",
+          url: "https://example.com/"
         })
       });
       
@@ -75,9 +99,12 @@ const TextRewriter = ({ demoMode = false }: TextRewriterProps) => {
       const data = await response.json();
       
       // Update the output text based on the API response
-      // Note: Adjust this based on the actual API response structure
+      // The actual response structure may need to be adjusted based on API documentation
       if (data && data.humanized_text) {
         setOutputText(data.humanized_text);
+      } else if (data && data.result) {
+        // Alternative response field name
+        setOutputText(data.result);
       } else {
         // Fallback to simple rewriting if API response is unexpected
         const sentences = inputText.match(/[^.!?]+[.!?]+/g) || [inputText];
