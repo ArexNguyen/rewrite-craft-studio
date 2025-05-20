@@ -1,1 +1,5 @@
+
 project_id = "yzhrlxrfimbrnhhwonfm"
+
+[functions.send-text-to-api]
+verify_jwt = false
