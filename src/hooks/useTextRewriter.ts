@@ -42,6 +42,8 @@ export const useTextRewriter = ({ demoMode = false }: UseTextRewriterProps) => {
     setIsProcessing(true);
     
     try {
+      console.log("Calling edge function with:", { inputText, selectedStyle });
+      
       // Call the Supabase edge function
       const { data, error } = await supabase.functions.invoke('send-text-to-api', {
         body: {
@@ -51,9 +53,17 @@ export const useTextRewriter = ({ demoMode = false }: UseTextRewriterProps) => {
       });
 
       if (error) {
-        throw error;
+        console.error("Supabase function error:", error);
+        throw new Error(`Edge function error: ${error.message}`);
       }
 
+      if (!data) {
+        console.error("No data returned from edge function");
+        throw new Error("No data returned from edge function");
+      }
+
+      console.log("Edge function response:", data);
+      
       // Use secondApiData from the response
       setOutputText(data.secondApiData || '');
       setRewriteCount(prev => prev + 1);
@@ -70,7 +80,7 @@ export const useTextRewriter = ({ demoMode = false }: UseTextRewriterProps) => {
       console.error('Error calling edge function:', error);
       toast({
         title: "Error rewriting text",
-        description: "There was a problem connecting to the rewriting service. Please try again.",
+        description: "There was a problem with the text rewriting service. Using fallback method instead.",
         variant: "destructive"
       });
       
