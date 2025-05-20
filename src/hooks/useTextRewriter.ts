@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { fallbackRewrite } from '@/utils/textRewriteAPI';
+import { fallbackRewrite, rewriteText } from '@/utils/textRewriteAPI';
 import { supabase } from '@/integrations/supabase/client';
 
 interface UseTextRewriterProps {
@@ -44,7 +44,7 @@ export const useTextRewriter = ({ demoMode = false }: UseTextRewriterProps) => {
     try {
       console.log("Calling edge function with:", { inputText, selectedStyle });
       
-      // Call the Supabase edge function
+      // First attempt - try using the Supabase edge function
       const { data, error } = await supabase.functions.invoke('send-text-to-api', {
         body: {
           inputText,
@@ -64,8 +64,17 @@ export const useTextRewriter = ({ demoMode = false }: UseTextRewriterProps) => {
 
       console.log("Edge function response:", data);
       
-      // Use secondApiData from the response
-      setOutputText(data.secondApiData || '');
+      // Check if the response has the expected secondApiData property
+      if (data.secondApiData !== undefined) {
+        setOutputText(data.secondApiData);
+      } else if (data.result !== undefined) {
+        // Fallback to result property if secondApiData doesn't exist
+        setOutputText(data.result);
+      } else {
+        // If neither property exists, try to use the data itself if it's a string
+        setOutputText(typeof data === 'string' ? data : JSON.stringify(data));
+      }
+      
       setRewriteCount(prev => prev + 1);
       
       // Deduct credits if not in demo mode
@@ -78,15 +87,34 @@ export const useTextRewriter = ({ demoMode = false }: UseTextRewriterProps) => {
       }
     } catch (error) {
       console.error('Error calling edge function:', error);
-      toast({
-        title: "Error rewriting text",
-        description: "There was a problem with the text rewriting service. Using fallback method instead.",
-        variant: "destructive"
-      });
       
-      // Use fallback if API call fails
-      const fallbackResult = fallbackRewrite(inputText);
-      setOutputText(fallbackResult);
+      // Second attempt - try using the direct API call if edge function fails
+      try {
+        console.log("Edge function failed, trying direct API call");
+        const directResult = await rewriteText(inputText, selectedStyle);
+        setOutputText(directResult);
+        setRewriteCount(prev => prev + 1);
+        
+        if (!demoMode && user) {
+          updateUserCredits(user.credits - 1);
+          toast({
+            title: "Rewrite complete (fallback)!",
+            description: `Used 1 credit. Remaining: ${user.credits - 1} credits.`,
+          });
+        }
+      } catch (directApiError) {
+        console.error('Direct API call also failed:', directApiError);
+        
+        // Last resort fallback
+        toast({
+          title: "Error rewriting text",
+          description: "All rewriting methods failed. Using simple fallback instead.",
+          variant: "destructive"
+        });
+        
+        const fallbackResult = fallbackRewrite(inputText);
+        setOutputText(fallbackResult);
+      }
     } finally {
       setIsProcessing(false);
     }
