@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { rewriteText, fallbackRewrite } from '@/utils/textRewriteAPI';
+import { fallbackRewrite } from '@/utils/textRewriteAPI';
+import { supabase } from '@/integrations/supabase/client';
 
 interface UseTextRewriterProps {
   demoMode?: boolean;
@@ -41,9 +42,19 @@ export const useTextRewriter = ({ demoMode = false }: UseTextRewriterProps) => {
     setIsProcessing(true);
     
     try {
-      // Call the API service
-      const rewrittenText = await rewriteText(inputText, selectedStyle);
-      setOutputText(rewrittenText);
+      // Call the Supabase edge function
+      const { data, error } = await supabase.functions.invoke('send-text-to-api', {
+        body: {
+          inputText,
+          selectedStyle
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setOutputText(data.rewrittenText || '');
       setRewriteCount(prev => prev + 1);
       
       // Deduct credits if not in demo mode
@@ -55,7 +66,7 @@ export const useTextRewriter = ({ demoMode = false }: UseTextRewriterProps) => {
         });
       }
     } catch (error) {
-      console.error('Error calling humanize API:', error);
+      console.error('Error calling edge function:', error);
       toast({
         title: "Error rewriting text",
         description: "There was a problem connecting to the rewriting service. Please try again.",
