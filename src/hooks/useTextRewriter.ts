@@ -54,7 +54,8 @@ export const useTextRewriter = ({ demoMode = false }: UseTextRewriterProps) => {
         throw error;
       }
 
-      setOutputText(data.rewrittenText || '');
+      // Use secondApiData from the response
+      setOutputText(data.secondApiData || '');
       setRewriteCount(prev => prev + 1);
       
       // Deduct credits if not in demo mode
